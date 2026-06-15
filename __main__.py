@@ -65,6 +65,62 @@ def cmd_stats(args):
     print(f"  Metadata: {doc.metadata}")
 
 
+def cmd_embed_and_store(args):
+    """Ingest a file, embed chunks, store in Qdrant."""
+    from rag.ingestion import IngestionPipeline
+    from rag.embeddings import Embedder
+    from rag.vectorstore import VectorStore
+
+    pipeline = IngestionPipeline()
+    embedder = Embedder()
+    store = VectorStore()
+
+    chunks = pipeline.ingest_file(args.file)
+    print(f"Created {len(chunks)} chunks. Embedding...")
+
+    embeddings = embedder.embed_texts([c.text for c in chunks])
+    count = store.upsert(chunks, embeddings)
+    print(f"Stored {count} chunks in Qdrant.")
+
+
+def cmd_search(args):
+    """Search the vector store and return top chunks."""
+    from rag.embeddings import Embedder
+    from rag.vectorstore import VectorStore
+
+    embedder = Embedder()
+    store = VectorStore()
+
+    query_vec = embedder.embed_query(args.query)
+    results = store.search(query_vec, top_k=args.top_k)
+
+    print(f"\nTop {len(results)} results for: {args.query}\n")
+    for i, (payload, score) in enumerate(results, 1):
+        preview = payload["text"][:150].replace("\n", " ")
+        print(f"[{i}] score={score:.3f} source={payload['source']}")
+        print(f"    {preview}...\n")
+
+
+def cmd_ask(args):
+    """Full RAG pipeline: search + generate grounded answer."""
+    from rag.embeddings import Embedder
+    from rag.vectorstore import VectorStore
+    from rag.generator import Generator
+
+    embedder = Embedder()
+    store = VectorStore()
+    generator = Generator()
+
+    query_vec = embedder.embed_query(args.query)
+    results = store.search(query_vec, top_k=5)
+    chunks = [payload for payload, _ in results]
+
+    print(f"\nQuestion: {args.query}\n")
+    print("Retrieving relevant context...")
+    answer = generator.generate(args.query, chunks)
+    print(f"\nAnswer:\n{answer}\n")
+
+
 def main():
     parser = argparse.ArgumentParser(prog="rag",
                                      description="Production RAG framework")
@@ -85,6 +141,19 @@ def main():
     p_st = sub.add_parser("stats", help="Show document statistics")
     p_st.add_argument("file")
     p_st.set_defaults(func=cmd_stats)
+
+    p_es = sub.add_parser("embed-and-store", help="Ingest, embed, and store a file")
+    p_es.add_argument("file")
+    p_es.set_defaults(func=cmd_embed_and_store)
+
+    p_sr = sub.add_parser("search", help="Search vector store for a query")
+    p_sr.add_argument("query")
+    p_sr.add_argument("--top-k", type=int, default=5)
+    p_sr.set_defaults(func=cmd_search)
+
+    p_ask = sub.add_parser("ask", help="Full RAG: search + generate answer")
+    p_ask.add_argument("query")
+    p_ask.set_defaults(func=cmd_ask)
 
     args = parser.parse_args()
     if not args.command:
