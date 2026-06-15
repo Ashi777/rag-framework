@@ -1,0 +1,6 @@
+# Phase 1 — document ingestion + chunking
+pypdf>=4.0.0          # PDF text extraction
+tiktoken>=0.7.0       # accurate token counting (OpenAI-compatible)
+
+# Testing
+pytest>=8.0.0
