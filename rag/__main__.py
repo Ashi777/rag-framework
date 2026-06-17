@@ -238,6 +238,125 @@ def cmd_cited_ask(args):
         print("(No inline citations detected in the answer.)")
 
 
+def cmd_evaluate(args):
+    """Run RAGAS-style evaluation on a JSON file of test samples.
+
+    JSON format — each item must have 'query' and 'ground_truth'.
+    'answer' and 'contexts' are optional: if absent, the full pipeline
+    (hybrid retrieval → reranking → generation) runs automatically.
+
+    Example minimal JSON:
+        [{"query": "...", "ground_truth": "..."}]
+
+    Example precomputed JSON (no Qdrant needed):
+        [{"query": "...", "ground_truth": "...", "answer": "...",
+          "contexts": ["chunk text 1", "chunk text 2"]}]
+    """
+    import json as _json
+    from rag.models import EvalSample
+    from rag.evaluator import RagasEvaluator
+    from rag.embeddings import Embedder
+    from rag.generator import Generator
+
+    with open(args.file, encoding="utf-8") as fh:
+        raw = _json.load(fh)
+
+    samples = [
+        EvalSample(
+            query=item["query"],
+            ground_truth=item["ground_truth"],
+            answer=item.get("answer", ""),
+            contexts=item.get("contexts", []),
+        )
+        for item in raw
+    ]
+
+    # Run the full pipeline for any sample missing answer or contexts
+    needs_pipeline = [s for s in samples if not s.answer or not s.contexts]
+    if needs_pipeline:
+        from rag.vectorstore import VectorStore
+        from rag.hybrid_retriever import HybridRetriever
+        from rag.reranker import Reranker
+        from rag.config import RERANK_FETCH_N, RERANK_TOP_N
+
+        embedder = Embedder()
+        store = VectorStore()
+        retriever = HybridRetriever(vector_store=store, embedder=embedder)
+        reranker = Reranker()
+        generator = Generator()
+
+        print("Building BM25 index from Qdrant...")
+        count = retriever.build_bm25_index_from_store()
+        print(f"Indexed {count} chunks.\n")
+
+        for i, sample in enumerate(samples):
+            if sample.answer and sample.contexts:
+                continue
+            print(f"  Pipeline [{i + 1}/{len(samples)}]: {sample.query[:60]}...")
+            candidates = [p for p, _ in retriever.search(sample.query, top_k=RERANK_FETCH_N)]
+            reranked = reranker.rerank(sample.query, candidates, top_n=RERANK_TOP_N)
+            sample.contexts = [p["text"] for p, _ in reranked]
+            cited = generator.generate_with_citations(sample.query, [p for p, _ in reranked])
+            sample.answer = cited.answer
+    else:
+        embedder = Embedder()
+        generator = Generator()
+
+    # Evaluate
+    print(f"\nEvaluating {len(samples)} sample(s) with LLM-as-judge...\n")
+    evaluator = RagasEvaluator(generator=generator, embedder=embedder)
+
+    all_results = []
+    for i, sample in enumerate(samples):
+        print(f"  Scoring [{i + 1}/{len(samples)}]: {sample.query[:60]}...")
+        result = evaluator.score_sample(sample)
+        all_results.append(result)
+
+    from rag.models import EvalReport
+    report = EvalReport(results=all_results)
+
+    # Print report
+    print()
+    print("=" * 52)
+    print("  RAGAS EVALUATION REPORT")
+    print("=" * 52)
+    print(f"  Faithfulness:       {report.faithfulness:.3f}  (answer grounded in context?)")
+    print(f"  Context Relevance:  {report.context_relevance:.3f}  (context relevant to query?)")
+    print(f"  Context Recall:     {report.context_recall:.3f}  (context covers ground truth?)")
+    print(f"  Answer Relevance:   {report.answer_relevance:.3f}  (answer addresses the question?)")
+    print(f"  {'─' * 48}")
+    print(f"  Overall Score:      {report.overall:.3f}")
+    print("=" * 52)
+
+    if len(samples) > 1:
+        print("\nPer-sample breakdown:")
+        for r in all_results:
+            print(f"  [{r.mean_score:.3f}] {r.query[:55]}")
+
+    if args.output:
+        out = {
+            "overall": report.overall,
+            "faithfulness": report.faithfulness,
+            "context_relevance": report.context_relevance,
+            "context_recall": report.context_recall,
+            "answer_relevance": report.answer_relevance,
+            "samples": [
+                {
+                    "query": r.query,
+                    "faithfulness": r.faithfulness,
+                    "context_relevance": r.context_relevance,
+                    "context_recall": r.context_recall,
+                    "answer_relevance": r.answer_relevance,
+                    "mean_score": r.mean_score,
+                }
+                for r in all_results
+            ],
+        }
+        with open(args.output, "w", encoding="utf-8") as fh:
+            _json.dump(out, fh, indent=2)
+        print(f"\nDetailed results saved to: {args.output}")
+
+
 def main():
     parser = argparse.ArgumentParser(prog="rag",
                                      description="Production RAG framework")
@@ -289,6 +408,11 @@ def main():
     p_ca = sub.add_parser("cited-ask", help="Full pipeline with citations: hybrid + rerank + LLM")
     p_ca.add_argument("query")
     p_ca.set_defaults(func=cmd_cited_ask)
+
+    p_ev = sub.add_parser("evaluate", help="RAGAS evaluation: score faithfulness, relevance, recall")
+    p_ev.add_argument("file", help="JSON file with eval samples (query + ground_truth required)")
+    p_ev.add_argument("--output", metavar="FILE", help="Save detailed JSON results to FILE")
+    p_ev.set_defaults(func=cmd_evaluate)
 
     args = parser.parse_args()
     if not args.command:

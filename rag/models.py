@@ -78,3 +78,72 @@ class CitedAnswer:
         return sorted(set(
             int(n) for n in re.findall(r'\[(\d+)\]', self.answer)
         ))
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — evaluation
+# ---------------------------------------------------------------------------
+
+@dataclass
+class EvalSample:
+    """One evaluation record: query + expected answer + retrieved context.
+
+    Populate answer and contexts either by running the pipeline or by loading
+    precomputed values from a JSON eval file. The evaluator accepts either.
+    """
+    query: str
+    ground_truth: str                              # Human-labeled reference answer
+    answer: str = ""                               # Generated answer (filled by pipeline)
+    contexts: list[str] = field(default_factory=list)  # Retrieved chunk texts
+
+
+@dataclass
+class EvalResult:
+    """RAGAS metric scores for a single EvalSample. All values in [0, 1]."""
+    query: str
+    faithfulness: float        # answer claims grounded in context
+    context_relevance: float   # context sentences relevant to query
+    context_recall: float      # context covers the ground-truth answer
+    answer_relevance: float    # answer addresses the question
+
+    @property
+    def mean_score(self) -> float:
+        return round(
+            (self.faithfulness + self.context_relevance
+             + self.context_recall + self.answer_relevance) / 4,
+            4,
+        )
+
+
+@dataclass
+class EvalReport:
+    """Aggregated RAGAS evaluation report over multiple samples."""
+    results: list[EvalResult]
+
+    def _avg(self, attr: str) -> float:
+        vals = [getattr(r, attr) for r in self.results]
+        return round(sum(vals) / len(vals), 4) if vals else 0.0
+
+    @property
+    def faithfulness(self) -> float:
+        return self._avg("faithfulness")
+
+    @property
+    def context_relevance(self) -> float:
+        return self._avg("context_relevance")
+
+    @property
+    def context_recall(self) -> float:
+        return self._avg("context_recall")
+
+    @property
+    def answer_relevance(self) -> float:
+        return self._avg("answer_relevance")
+
+    @property
+    def overall(self) -> float:
+        return round(
+            (self.faithfulness + self.context_relevance
+             + self.context_recall + self.answer_relevance) / 4,
+            4,
+        )
