@@ -11,3 +11,7 @@ COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "rag_chunks")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 EMBEDDING_DIMS = 384  # all-MiniLM-L6-v2 produces 384-dim vectors
 LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.0-flash")
+
+# Phase 3 — hybrid search
+RRF_K = int(os.getenv("RRF_K", "60"))          # RRF smoothing constant (paper default)
+HYBRID_FETCH_K = int(os.getenv("HYBRID_FETCH_K", "20"))  # candidates per retriever before fusion

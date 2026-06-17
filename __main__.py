@@ -121,6 +121,54 @@ def cmd_ask(args):
     print(f"\nAnswer:\n{answer}\n")
 
 
+def cmd_hybrid_search(args):
+    """Hybrid search: BM25 + vector search fused with Reciprocal Rank Fusion."""
+    from rag.embeddings import Embedder
+    from rag.vectorstore import VectorStore
+    from rag.hybrid_retriever import HybridRetriever
+
+    embedder = Embedder()
+    store = VectorStore()
+    retriever = HybridRetriever(vector_store=store, embedder=embedder)
+
+    print("Building BM25 index from Qdrant...")
+    count = retriever.build_bm25_index_from_store()
+    print(f"Indexed {count} chunks.\n")
+
+    results = retriever.search(args.query, top_k=args.top_k)
+
+    print(f"Top {len(results)} hybrid results for: {args.query}\n")
+    for i, (payload, score) in enumerate(results, 1):
+        preview = payload["text"][:150].replace("\n", " ")
+        print(f"[{i}] rrf_score={score:.4f}  source={payload['source']}")
+        print(f"    {preview}...\n")
+
+
+def cmd_hybrid_ask(args):
+    """Full RAG pipeline with hybrid retrieval: BM25 + vector + LLM answer."""
+    from rag.embeddings import Embedder
+    from rag.vectorstore import VectorStore
+    from rag.hybrid_retriever import HybridRetriever
+    from rag.generator import Generator
+
+    embedder = Embedder()
+    store = VectorStore()
+    retriever = HybridRetriever(vector_store=store, embedder=embedder)
+    generator = Generator()
+
+    print("Building BM25 index from Qdrant...")
+    count = retriever.build_bm25_index_from_store()
+    print(f"Indexed {count} chunks.")
+
+    results = retriever.search(args.query, top_k=5)
+    chunks = [payload for payload, _ in results]
+
+    print(f"\nQuestion: {args.query}\n")
+    print("Retrieving relevant context (hybrid: vector + BM25)...")
+    answer = generator.generate(args.query, chunks)
+    print(f"\nAnswer:\n{answer}\n")
+
+
 def main():
     parser = argparse.ArgumentParser(prog="rag",
                                      description="Production RAG framework")
@@ -154,6 +202,15 @@ def main():
     p_ask = sub.add_parser("ask", help="Full RAG: search + generate answer")
     p_ask.add_argument("query")
     p_ask.set_defaults(func=cmd_ask)
+
+    p_hs = sub.add_parser("hybrid-search", help="Hybrid search (BM25 + vector + RRF)")
+    p_hs.add_argument("query")
+    p_hs.add_argument("--top-k", type=int, default=5)
+    p_hs.set_defaults(func=cmd_hybrid_search)
+
+    p_ha = sub.add_parser("hybrid-ask", help="Hybrid RAG: BM25 + vector + LLM answer")
+    p_ha.add_argument("query")
+    p_ha.set_defaults(func=cmd_hybrid_ask)
 
     args = parser.parse_args()
     if not args.command:

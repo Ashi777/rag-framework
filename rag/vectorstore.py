@@ -60,3 +60,25 @@ class VectorStore:
     def count(self) -> int:
         """Return total number of stored chunks."""
         return self.client.count(self.collection).count
+
+    def scroll_all(self) -> list[dict]:
+        """Fetch every stored payload from Qdrant without vectors.
+
+        Used by the hybrid retriever to build an in-memory BM25 index
+        over whatever is currently in the collection.
+        """
+        all_payloads: list[dict] = []
+        offset = None
+        while True:
+            batch, next_offset = self.client.scroll(
+                collection_name=self.collection,
+                limit=100,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            all_payloads.extend(r.payload for r in batch)
+            if next_offset is None:
+                break
+            offset = next_offset
+        return all_payloads
