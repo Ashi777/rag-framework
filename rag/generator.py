@@ -7,6 +7,7 @@ Supported providers (set LLM_PROVIDER in .env):
 Both are free tier, no credit card required.
 """
 import os
+import re
 from .config import GEMINI_API_KEY, LLM_MODEL
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -67,3 +68,53 @@ Answer:"""
                 contents=prompt,
             )
             return response.text
+
+    def generate_with_citations(self, query: str, context_chunks: list[dict]) -> "CitedAnswer":
+        """Generate a grounded answer with inline [N] citation markers.
+
+        Each chunk is numbered [1]..[N] in the prompt. The LLM is instructed
+        to cite inline. Cited chunk indices are parsed from the response and
+        returned in a CitedAnswer object.
+        """
+        from .models import CitedAnswer
+
+        context_parts = [
+            f"[{i}] [Source: {c.get('source', 'unknown')}]\n{c.get('text', '')}"
+            for i, c in enumerate(context_chunks, 1)
+        ]
+        context = "\n\n---\n\n".join(context_parts)
+
+        prompt = f"""Answer the question using ONLY the context below.
+After each fact you use, add an inline citation like [1] or [2] that refers to the context number.
+If the context does not contain the answer, say so honestly.
+
+Context:
+{context}
+
+Question: {query}
+
+Answer (with inline citations):"""
+
+        if self.provider == "groq":
+            groq_model = self.model if "llama" in self.model or "mixtral" in self.model or "gemma" in self.model \
+                else "llama-3.3-70b-versatile"
+            response = self._client.chat.completions.create(
+                model=groq_model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            answer_text = response.choices[0].message.content
+        else:  # gemini
+            response = self._client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+            )
+            answer_text = response.text
+
+        cited_nums = sorted(set(int(n) for n in re.findall(r'\[(\d+)\]', answer_text)))
+        citations = [
+            context_chunks[n - 1]
+            for n in cited_nums
+            if 1 <= n <= len(context_chunks)
+        ]
+
+        return CitedAnswer(answer=answer_text, citations=citations, query=query)

@@ -9,6 +9,7 @@ with positional info needed for citation tracking later.
 from dataclasses import dataclass, field
 from typing import Optional
 from uuid import uuid4
+import re
 
 
 @dataclass
@@ -45,3 +46,35 @@ class Chunk:
     def __repr__(self):
         preview = self.text[:60].replace("\n", " ")
         return f"Chunk(idx={self.chunk_index}, src={self.source}, preview='{preview}...')"
+
+
+@dataclass
+class CitedAnswer:
+    """LLM answer with tracked inline citations.
+
+    The answer text contains [1], [2] markers that reference specific
+    context chunks. citations holds the subset of chunks that were
+    actually cited in the answer.
+    """
+    answer: str           # Answer text with inline [1] [2] citation markers
+    citations: list[dict] # Chunks that were cited, in citation-number order
+    query: str            # Original query
+
+    @property
+    def cited_sources(self) -> list[str]:
+        """Unique source filenames that appear in citations."""
+        seen: set[str] = set()
+        out: list[str] = []
+        for c in self.citations:
+            s = c.get("source", "unknown")
+            if s not in seen:
+                seen.add(s)
+                out.append(s)
+        return out
+
+    @property
+    def citation_numbers(self) -> list[int]:
+        """Sorted list of citation numbers that appear in the answer text."""
+        return sorted(set(
+            int(n) for n in re.findall(r'\[(\d+)\]', self.answer)
+        ))
