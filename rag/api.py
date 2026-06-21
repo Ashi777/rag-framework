@@ -22,7 +22,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -178,7 +178,8 @@ async def upload_document(file: UploadFile = File(...)):
     The file is chunked, embedded, and stored in Qdrant.
     The BM25 index is invalidated so the next search includes new chunks.
     """
-    allowed = {".pdf", ".txt", ".md", ".html", ".htm"}
+    allowed = {".pdf", ".txt", ".md", ".html", ".htm",
+               ".png", ".jpg", ".jpeg", ".gif", ".webp"}
     ext = Path(file.filename or "").suffix.lower()
     if ext not in allowed:
         raise HTTPException(
@@ -247,6 +248,82 @@ async def search(request: SearchRequest):
             )
             for i, (p, score) in enumerate(reranked)
         ]
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.post("/ask-image", response_model=AskResponse, tags=["generation"])
+async def ask_image(
+    file: UploadFile = File(..., description="Image file (PNG, JPEG, GIF, WebP)"),
+    query: str = Form(default="Describe what you see in this image."),
+    top_k: int = Form(default=5),
+):
+    """Answer a question about an uploaded image, grounded in the knowledge base.
+
+    The image is sent directly to Gemini 2.0 Flash vision. Relevant text chunks
+    from Qdrant are retrieved using the text query and included as context so
+    Gemini can cross-reference the image with your indexed documents.
+    """
+    from rag.vision import SUPPORTED_IMAGE_EXTS, VisionAnalyzer
+
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in SUPPORTED_IMAGE_EXTS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unsupported image type '{ext}'. "
+                f"Supported: {', '.join(sorted(SUPPORTED_IMAGE_EXTS))}"
+            ),
+        )
+
+    if not query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+
+    image_bytes = await file.read()
+    mime_type = SUPPORTED_IMAGE_EXTS[ext]
+
+    try:
+        from rag.config import RERANK_FETCH_N
+
+        # Retrieve relevant text context using the text query
+        context_chunks: list[dict] = []
+        try:
+            retriever = _get_retriever()
+            retriever.build_bm25_index_from_store()
+            reranker = _get_reranker()
+            candidates = [p for p, _ in retriever.search(query, top_k=RERANK_FETCH_N)]
+            if candidates:
+                context_chunks = [
+                    p for p, _ in reranker.rerank(query, candidates, top_n=top_k)
+                ]
+        except Exception:
+            # Vector store unavailable — answer from image only, don't fail
+            pass
+
+        analyzer = VisionAnalyzer()
+        answer = analyzer.answer_about_image(
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            query=query,
+            context_chunks=context_chunks or None,
+        )
+
+        cited_sources = list(dict.fromkeys(
+            c.get("source", "unknown") for c in context_chunks
+        ))
+        citations = [
+            {"source": c.get("source", "unknown"), "text": c.get("text", "")[:200]}
+            for c in context_chunks
+        ]
+
+        return AskResponse(
+            query=query,
+            answer=answer,
+            citations=citations,
+            cited_sources=cited_sources,
+        )
     except HTTPException:
         raise
     except Exception as exc:

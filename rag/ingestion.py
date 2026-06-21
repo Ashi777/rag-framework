@@ -41,7 +41,8 @@ class IngestionPipeline:
     """
 
     SUPPORTED_EXTS = {".pdf", ".html", ".htm", ".txt", ".md",
-                      ".markdown", ".rst"}
+                      ".markdown", ".rst",
+                      ".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
     def __init__(self, chunker: Optional[SemanticChunker] = None):
         self.chunker = chunker or SemanticChunker()

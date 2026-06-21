@@ -17,6 +17,7 @@ from typing import Optional
 from html.parser import HTMLParser
 
 from .models import Document
+from .vision import SUPPORTED_IMAGE_EXTS
 
 
 # ---------------------------------------------------------------------------
@@ -207,11 +208,40 @@ def load_pdf(path: str | Path) -> Document:
 # Smart dispatcher — picks the right loader by file extension
 # ---------------------------------------------------------------------------
 
+def load_image(path: str | Path) -> Document:
+    """
+    Load an image by sending it to Gemini 2.0 Flash for a text description.
+
+    The returned Document's content is Gemini's detailed description (OCR +
+    visual understanding). It flows through the normal chunking → embedding →
+    Qdrant pipeline, making the image fully searchable via text queries.
+    """
+    from .vision import VisionAnalyzer
+
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Image file not found: {path}")
+
+    analyzer = VisionAnalyzer()
+    description = analyzer.describe_image(path)
+
+    return Document(
+        content=description,
+        source=path.name,
+        metadata={
+            "format": "image",
+            "image_ext": path.suffix.lower(),
+            "size_bytes": path.stat().st_size,
+            "path": str(path.absolute()),
+        },
+    )
+
+
 def load_document(path: str | Path) -> Document:
     """
     Load any supported document type, dispatching by file extension.
 
-    Supported: .pdf, .html, .htm, .txt, .md
+    Supported: .pdf, .html, .htm, .txt, .md, .png, .jpg, .jpeg, .gif, .webp
     """
     path = Path(path)
     ext = path.suffix.lower()
@@ -222,5 +252,7 @@ def load_document(path: str | Path) -> Document:
         return load_html(path)
     if ext in (".txt", ".md", ".markdown", ".rst"):
         return load_text(path)
+    if ext in SUPPORTED_IMAGE_EXTS:
+        return load_image(path)
 
     raise ValueError(f"Unsupported file type: {ext} (file: {path.name})")

@@ -24,6 +24,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/" className="text-gray-300 hover:text-white transition-colors">
                 Ask
               </Link>
+              <Link href="/ask-image" className="text-gray-300 hover:text-white transition-colors">
+                Ask Image
+              </Link>
               <Link href="/upload" className="text-gray-300 hover:text-white transition-colors">
                 Upload
               </Link>
