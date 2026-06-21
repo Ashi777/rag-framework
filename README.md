@@ -2,6 +2,7 @@
 
 > Production-grade Retrieval Augmented Generation — built from scratch, $0/month forever.
 
+[![CI](https://github.com/Ashi777/rag-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/Ashi777/rag-framework/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=nextdotjs&logoColor=white)

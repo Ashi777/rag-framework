@@ -71,7 +71,12 @@ class VisionAnalyzer:
                 types.Part.from_text(text=_DESCRIBE_PROMPT),
             ],
         )
-        return response.text
+        try:
+            return response.text
+        except ValueError:
+            # Gemini blocked the response (safety filter, trivial/blank image, etc.).
+            # Return a minimal description so ingestion can still proceed.
+            return f"Image file: {path.name}"
 
     def answer_about_image(
         self,

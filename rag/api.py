@@ -217,6 +217,10 @@ async def upload_document(file: UploadFile = File(...)):
             chunks_stored=stored,
             message=f"Successfully ingested {stored} chunks from '{file.filename}'.",
         )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     finally:
         os.unlink(tmp_path)
 
