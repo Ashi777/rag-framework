@@ -77,6 +77,73 @@ export async function getStats(): Promise<StatsResponse> {
   return handleResponse<StatsResponse>(res)
 }
 
+// ---------------------------------------------------------------------------
+// Streaming types
+// ---------------------------------------------------------------------------
+
+export type StreamEvent =
+  | { type: 'token';     text: string }
+  | { type: 'citations'; citations: AskResponse['citations']; cited_sources: string[] }
+  | { type: 'error';     message: string }
+  | { type: 'done' }
+
+/**
+ * POST /stream — yields SSE events as they arrive from the server.
+ *
+ * Usage:
+ *   for await (const event of streamAsk('What is RAG?')) {
+ *     if (event.type === 'token') appendText(event.text)
+ *   }
+ */
+export async function* streamAsk(
+  query: string,
+  topK = 5,
+): AsyncGenerator<StreamEvent> {
+  const res = await fetch(`${API_URL}/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, top_k: topK }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error((err as { detail?: string }).detail ?? 'Stream request failed')
+  }
+
+  if (!res.body) throw new Error('No response body from /stream')
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+
+    // SSE events are delimited by double newline
+    const parts = buffer.split('\n\n')
+    buffer = parts.pop() ?? ''
+
+    for (const part of parts) {
+      for (const line of part.split('\n')) {
+        if (!line.startsWith('data: ')) continue
+        const payload = line.slice(6).trim()
+        if (payload === '[DONE]') {
+          yield { type: 'done' }
+          return
+        }
+        try {
+          yield JSON.parse(payload) as StreamEvent
+        } catch {
+          // malformed event — skip
+        }
+      }
+    }
+  }
+}
+
 export async function askImage(
   file: File,
   query = 'Describe what you see in this image.',

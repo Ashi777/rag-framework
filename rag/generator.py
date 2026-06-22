@@ -8,6 +8,7 @@ Both are free tier, no credit card required.
 """
 import os
 import re
+from typing import Iterator
 from .config import GEMINI_API_KEY, LLM_MODEL
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -118,3 +119,55 @@ Answer (with inline citations):"""
         ]
 
         return CitedAnswer(answer=answer_text, citations=citations, query=query)
+
+    def generate_stream(self, query: str, context_chunks: list[dict]) -> Iterator[str]:
+        """Stream the answer token-by-token.
+
+        Uses the same numbered-citation prompt as generate_with_citations so
+        that [1] [2] markers appear inline in the streamed text. The caller is
+        responsible for sending citation metadata as a separate event once
+        streaming finishes.
+
+        Yields:
+            str — raw text fragments (one or more tokens each).
+        """
+        context_parts = [
+            f"[{i}] [Source: {c.get('source', 'unknown')}]\n{c.get('text', '')}"
+            for i, c in enumerate(context_chunks, 1)
+        ]
+        context = "\n\n---\n\n".join(context_parts) if context_parts else "(No context retrieved)"
+
+        prompt = f"""Answer the question using ONLY the context below.
+After each fact you use, add an inline citation like [1] or [2] that refers to the context number.
+If the context does not contain the answer, say so honestly.
+
+Context:
+{context}
+
+Question: {query}
+
+Answer (with inline citations):"""
+
+        if self.provider == "groq":
+            groq_model = (
+                self.model
+                if any(k in self.model for k in ("llama", "mixtral", "gemma"))
+                else "llama-3.3-70b-versatile"
+            )
+            stream = self._client.chat.completions.create(
+                model=groq_model,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
+
+        else:  # gemini
+            for chunk in self._client.models.generate_content_stream(
+                model=self.model,
+                contents=prompt,
+            ):
+                if chunk.text:
+                    yield chunk.text
