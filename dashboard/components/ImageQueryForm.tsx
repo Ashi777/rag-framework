@@ -1,34 +1,43 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { askImage, type AskResponse } from '@/lib/api'
-import AnswerCard from './AnswerCard'
+import { askImage } from '@/lib/api'
+import {
+  ImageIcon, X, Send, Loader2, AlertCircle,
+  CheckCircle2, FileQuestion,
+} from 'lucide-react'
 
 const ACCEPTED = '.png,.jpg,.jpeg,.gif,.webp'
 
+interface Citation { source: string; text: string }
+interface Result {
+  answer: string
+  cited_sources: string[]
+  citations: Citation[]
+}
+
 export default function ImageQueryForm() {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<AskResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [file,     setFile]     = useState<File | null>(null)
+  const [preview,  setPreview]  = useState<string | null>(null)
+  const [query,    setQuery]    = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [loading,  setLoading]  = useState(false)
+  const [result,   setResult]   = useState<Result | null>(null)
+  const [error,    setError]    = useState<string | null>(null)
 
-  function pickFile(f: File) {
+  function pick(f: File) {
     setFile(f)
     setResult(null)
     setError(null)
-    const url = URL.createObjectURL(f)
-    setPreview(url)
+    setPreview(URL.createObjectURL(f))
   }
 
-  function handleDrop(e: React.DragEvent) {
+  function onDrop(e: React.DragEvent) {
     e.preventDefault()
     setDragOver(false)
     const f = e.dataTransfer.files[0]
-    if (f) pickFile(f)
+    if (f) pick(f)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -39,109 +48,162 @@ export default function ImageQueryForm() {
     setResult(null)
     try {
       const data = await askImage(file, query || undefined)
-      setResult(data)
+      setResult({
+        answer: data.answer,
+        cited_sources: data.cited_sources,
+        citations: data.citations as Citation[],
+      })
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Request failed')
+      setError(err instanceof Error ? err.message : 'Analysis failed')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Drop zone */}
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {/* ── Image drop zone ─────────────────────────────────────────── */}
       <div
         onClick={() => inputRef.current?.click()}
-        onDrop={handleDrop}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDrop={onDrop}
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
-        className={`cursor-pointer rounded-xl border-2 border-dashed transition-colors
-          ${dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50'}
-          flex flex-col items-center justify-center gap-3 p-10 text-center`}
+        className={`drop-zone cursor-pointer rounded-2xl border-2 border-dashed transition-all duration-200 overflow-hidden ${
+          dragOver
+            ? 'drag-over border-accent-purple/60 bg-accent-purple/5'
+            : preview
+              ? 'border-accent-purple/30'
+              : 'border-white/10 hover:border-accent-purple/40'
+        }`}
       >
         <input
           ref={inputRef}
           type="file"
           accept={ACCEPTED}
           className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) pickFile(f) }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) pick(f) }}
         />
+
         {preview ? (
-          <img
-            src={preview}
-            alt="Preview"
-            className="max-h-48 max-w-full rounded-lg object-contain shadow"
-          />
+          <div className="relative group">
+            <img
+              src={preview}
+              alt="Preview"
+              className="w-full max-h-64 object-contain p-4"
+            />
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl">
+              <p className="text-white text-sm font-medium">Click to change image</p>
+            </div>
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation()
+                setFile(null)
+                setPreview(null)
+                setResult(null)
+              }}
+              className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         ) : (
-          <>
-            <svg className="h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M13.5 12a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
-            </svg>
-            <p className="text-sm text-gray-500">
-              Drag & drop an image or <span className="text-blue-600 font-medium">click to browse</span>
-            </p>
-            <p className="text-xs text-gray-400">PNG, JPEG, GIF, WebP</p>
-          </>
+          <div className="flex flex-col items-center gap-4 p-12 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-bg-elevated border border-white/[0.06] flex items-center justify-center">
+              <ImageIcon className="w-8 h-8 text-ink-muted" />
+            </div>
+            <div>
+              <p className="font-semibold text-ink-primary">
+                Drop an image or{' '}
+                <span className="text-accent-purple">browse</span>
+              </p>
+              <p className="text-sm text-ink-muted mt-1">
+                PNG · JPEG · GIF · WebP
+              </p>
+            </div>
+          </div>
         )}
       </div>
 
       {file && (
-        <p className="text-xs text-gray-500 -mt-3">
-          {file.name} &nbsp;·&nbsp; {(file.size / 1024).toFixed(1)} KB
-          <button
-            type="button"
-            onClick={() => { setFile(null); setPreview(null); setResult(null) }}
-            className="ml-3 text-red-400 hover:text-red-600"
-          >
-            Remove
-          </button>
+        <p className="text-xs text-ink-muted -mt-2">
+          <span className="font-mono text-ink-secondary">{file.name}</span>
+          {' · '}{(file.size / 1024).toFixed(1)} KB
         </p>
       )}
 
-      {/* Question input */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Question <span className="text-gray-400 font-normal">(optional)</span>
-        </label>
+      {/* ── Query input ─────────────────────────────────────────────── */}
+      <div className="relative input-glow rounded-xl bg-bg-card border border-white/[0.08] transition-all">
+        <FileQuestion className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted pointer-events-none" />
         <input
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="e.g. What does this chart show? What text is visible?"
-          className="w-full px-4 py-2.5 rounded-lg border border-gray-300 text-gray-900 placeholder-gray-400
-            focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+          onChange={e => setQuery(e.target.value)}
+          placeholder="What does this chart show? (optional — defaults to full description)"
           disabled={loading}
+          className="w-full bg-transparent text-ink-primary placeholder-ink-muted py-3.5 pl-11 pr-4 text-sm outline-none"
         />
       </div>
 
-      {/* Submit */}
+      {/* ── Submit ──────────────────────────────────────────────────── */}
       <button
         type="submit"
         disabled={!file || loading}
-        className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-sm
-          hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl bg-gradient-to-r from-accent-purple to-accent-purple/80 text-white font-semibold text-sm disabled:opacity-30 disabled:cursor-not-allowed hover:shadow-glow-purple transition-all duration-200"
       >
         {loading ? (
-          <span className="flex items-center justify-center gap-2">
-            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-            </svg>
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
             Analyzing with Gemini Vision…
-          </span>
-        ) : 'Analyze Image'}
+          </>
+        ) : (
+          <>
+            <Send className="w-4 h-4" />
+            Analyze Image
+          </>
+        )}
       </button>
 
-      {/* Error */}
+      {/* ── Error ───────────────────────────────────────────────────── */}
       {error && (
-        <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-          <span className="font-semibold">Error:</span> {error}
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-accent-red/10 border border-accent-red/20 text-accent-red text-sm animate-fade-in">
+          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <p>{error}</p>
         </div>
       )}
 
-      {/* Result */}
-      {result && <AnswerCard result={result} />}
+      {/* ── Result ──────────────────────────────────────────────────── */}
+      {result && (
+        <div className="animate-fade-in space-y-3">
+          <div className="p-4 rounded-xl bg-bg-card border border-white/[0.06]">
+            <div className="flex items-center gap-2 mb-3">
+              <CheckCircle2 className="w-4 h-4 text-accent-green" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                Gemini Vision Answer
+              </span>
+            </div>
+            <p className="text-sm text-ink-primary leading-relaxed whitespace-pre-wrap">
+              {result.answer}
+            </p>
+          </div>
+
+          {result.cited_sources.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {result.cited_sources.map((src, j) => (
+                <span
+                  key={src}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-accent-purple/10 border border-accent-purple/20 text-[11px] font-medium text-accent-purple"
+                >
+                  <span className="w-4 h-4 rounded-full bg-accent-purple text-white text-[9px] flex items-center justify-center font-bold">
+                    {j + 1}
+                  </span>
+                  <span className="font-mono truncate max-w-[140px]">{src}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </form>
   )
 }
