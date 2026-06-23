@@ -9,6 +9,10 @@ const inter = Inter({
   display: 'swap',
 })
 
+// Backend base URL — same env var the API client uses. Falls back to localhost
+// for local dev. Inlined at build time, so it must be set on Vercel before build.
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
 export const metadata: Metadata = {
   title: 'RAG Framework — Enterprise RAG',
   description:
@@ -53,7 +57,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </a>
 
                 <a
-                  href="http://localhost:8000/docs"
+                  href={`${API_URL}/docs`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ink-muted hover:text-ink-primary hover:bg-white/[0.05] text-xs font-medium transition-all"

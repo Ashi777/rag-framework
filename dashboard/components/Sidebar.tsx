@@ -9,6 +9,10 @@ import {
   Activity, BookOpen,
 } from 'lucide-react'
 
+// Hostname of the backend (strip protocol) for the status indicator.
+const API_HOST = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000')
+  .replace(/^https?:\/\//, '')
+
 const NAV = [
   {
     href: '/',
@@ -121,7 +125,7 @@ export default function Sidebar() {
           <div className="flex items-center gap-2">
             <Activity className="w-3 h-3 text-accent-green" />
             <span className="text-[11px] text-ink-muted">
-              <span className="text-accent-green font-medium">API</span> ready · localhost:8000
+              <span className="text-accent-green font-medium">API</span> ready · {API_HOST}
             </span>
           </div>
         </div>
