@@ -14,7 +14,7 @@ const inter = Inter({
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 export const metadata: Metadata = {
-  title: 'RAG Framework — Enterprise RAG',
+  title: 'DocuRetrieve — A Document RAG Engine',
   description:
     'Production-grade Retrieval Augmented Generation with hybrid BM25 + vector search, cross-encoder reranking, and LLM-powered cited answers.',
 }

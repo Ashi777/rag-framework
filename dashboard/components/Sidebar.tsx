@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   MessageSquare, Zap, ImageIcon, Upload,
-  ChevronLeft, ChevronRight, Database,
+  ChevronLeft, ChevronRight, Brain,
   Activity, BookOpen,
 } from 'lucide-react'
 
@@ -57,14 +57,12 @@ export default function Sidebar() {
       {/* ── Logo ─────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 px-4 h-14 border-b border-white/[0.06] flex-shrink-0">
         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center flex-shrink-0 shadow-glow-blue">
-          <Database className="w-4 h-4 text-white" />
+          <Brain className="w-4 h-4 text-white" />
         </div>
         {!collapsed && (
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-sm font-bold text-ink-primary truncate">RAG Framework</span>
-            <span className="flex-shrink-0 text-[10px] font-semibold bg-accent-blue/15 text-accent-blue px-1.5 py-0.5 rounded-full">
-              v1.0
-            </span>
+          <div className="flex flex-col min-w-0 leading-tight">
+            <span className="text-sm font-bold text-ink-primary truncate">DocuRetrieve</span>
+            <span className="text-[10px] text-ink-muted truncate">A Document RAG Engine</span>
           </div>
         )}
       </div>
