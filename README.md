@@ -1,3 +1,13 @@
+---
+title: RAG Framework API
+emoji: 🧠
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # RAG Framework
 
 > Production-grade Retrieval Augmented Generation — built from scratch, $0/month forever.
