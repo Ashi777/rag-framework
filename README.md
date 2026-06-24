@@ -1,16 +1,6 @@
----
-title: RAG Framework API
-emoji: 🧠
-colorFrom: blue
-colorTo: purple
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 # RAG Framework
 
-> Production-grade Retrieval Augmented Generation — built from scratch, $0/month forever.
+> Production-grade Retrieval Augmented Generation - built from scratch, $0/month forever.
 
 [![CI](https://github.com/Ashi777/rag-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/Ashi777/rag-framework/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
@@ -21,7 +11,7 @@ pinned: false
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Cost](https://img.shields.io/badge/cost-%240%2Fmonth-brightgreen)
 
-A full-stack RAG framework with hybrid BM25 + vector search, cross-encoder reranking, inline citations, multi-modal vision queries, and a built-in RAGAS evaluation engine — all running on free-tier services with no credit card required.
+A full-stack RAG framework with hybrid BM25 + vector search, cross-encoder reranking, inline citations, multi-modal vision queries, and a built-in RAGAS evaluation engine - all running on free-tier services with no credit card required.
 
 ---
 
